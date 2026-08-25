@@ -9,22 +9,17 @@
 </head>
 <body>
 
-    <button
-    onclick="openToolsPopup()"
-    style="
-        position: fixed;
-        top: 10px;
-        right: 10px;
-        z-index: 999999;
-        padding: 10px 15px;
-    "
->
-    POP OUT TOOLS
-</button>
+   
     <aside class="tactical-menu-dock">
 
         <!-- COLUMN 1: LEFT CATEGORY RAIL -->
-        <div id="categoryRail" class="category-rail"></div>
+        <div id="categoryRail" class="category-rail">
+    <button
+        id="openToolsButton"
+        title="Open tools in separate window">
+        ↗
+    </button>
+</div>
 
         <!-- COLUMN 2: ACTIVE TOOL DRAWER -->
         <div class="tool-drawer">

@@ -1,83 +1,205 @@
 import ms from "milsymbol";
 
-document.addEventListener("DOMContentLoaded", async () => {
-    try {
 
-        // =====================================================
-        // 1. INITIALIZE MAP
-        // =====================================================
+// =============================================================
+// PAGE TYPE
+// =============================================================
 
-        const map = L.map("map", {
-            zoomControl: false
-        }).setView([30.9010, 75.8573], 13);
+const isToolsWindow =
+    window.location.pathname.endsWith("tools.html");
 
-        L.tileLayer(
-            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-            {
-                maxZoom: 19,
-                attribution: "&copy; OpenStreetMap contributors"
+console.log(
+    "TOOLS PAGE:",
+    isToolsWindow
+        ? "/tools.html"
+        : "/"
+);
+
+
+// =============================================================
+// INITIALIZE
+// =============================================================
+
+document.addEventListener(
+    "DOMContentLoaded",
+    async () => {
+
+        try {
+
+            // =================================================
+            // MAP
+            // =================================================
+
+            const mapElement =
+                document.getElementById("map");
+
+
+            /*
+             * Main page has the Leaflet map.
+             *
+             * Detached tools page does not need
+             * another map because the main map is
+             * controlled through BroadcastChannel.
+             */
+
+            if (mapElement) {
+
+                const map =
+                    L.map(
+                        "map",
+                        {
+                            zoomControl: false
+                        }
+                    ).setView(
+                        [30.9010, 75.8573],
+                        13
+                    );
+
+
+                L.tileLayer(
+                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                    {
+                        maxZoom: 19,
+
+                        attribution:
+                            "&copy; OpenStreetMap contributors"
+                    }
+                ).addTo(map);
+
+
+                window.tacticalMap =
+                    map;
+
             }
-        ).addTo(map);
-
-        window.tacticalMap = map;
 
 
-        // =====================================================
-        // 2. LOAD TOOLS.JSON
-        // =====================================================
+            // =================================================
+            // LOAD TOOLS.JSON
+            // =================================================
 
-        const response = await fetch("tools.json");
-        const data = await response.json();
-
-        window.terrainToolData = data;
+            const response =
+                await fetch("tools.json");
 
 
-        // =====================================================
-        // 3. RENDER UI
-        // =====================================================
+            if (!response.ok) {
 
-        renderHeader(data.panel);
-        renderRail(data.sections);
-        renderSections(data.sections);
-        initRailScrolling();
-
-
-        // =====================================================
-        // 4. DEFAULT SECTION
-        // =====================================================
-
-        const defaultSection =
-            data.sections.find(section => section.id === "symbols") ||
-            data.sections[0];
-
-        if (defaultSection) {
-
-            const defaultButton =
-                document.querySelector(
-                    `.rail-btn[data-id="${defaultSection.id}"]`
+                throw new Error(
+                    `Failed to load tools.json: ${response.status}`
                 );
 
-            if (defaultButton && window.switchSection) {
-                window.switchSection(defaultSection.id, defaultButton);
             }
+
+
+            const data =
+                await response.json();
+
+
+            window.terrainToolData =
+                data;
+
+
+            // =================================================
+            // RENDER
+            // =================================================
+
+            renderHeader(
+                data.panel
+            );
+
+
+            renderRail(
+                data.sections
+            );
+
+
+            renderSections(
+                data.sections
+            );
+
+
+            initRailScrolling();
+
+
+            // =================================================
+            // DEFAULT SECTION
+            // =================================================
+
+            const defaultSection =
+                data.sections.find(
+                    section =>
+                        section.id === "symbols"
+                ) ||
+                data.sections[0];
+
+
+            if (defaultSection) {
+
+                const defaultButton =
+                    document.querySelector(
+                        `.rail-btn[data-id="${defaultSection.id}"]`
+                    );
+
+
+                if (
+                    defaultButton &&
+                    window.switchSection
+                ) {
+
+                    window.switchSection(
+                        defaultSection.id,
+                        defaultButton
+                    );
+
+                }
+
+            }
+
+
+            // =================================================
+            // DRAGGING
+            // =================================================
+
+            initDockDragging();
+
+
+            // =================================================
+            // TOOLS WINDOW HANDSHAKE
+            // =================================================
+
+            if (isToolsWindow) {
+
+                console.log(
+                    "Detached tools page rendered successfully"
+                );
+
+
+                if (window.toolsChannel) {
+
+                    window.toolsChannel.postMessage({
+
+                        type:
+                            "TOOLS_WINDOW_READY"
+
+                    });
+
+                }
+
+            }
+
+
         }
 
+        catch (error) {
 
-        // =====================================================
-        // 5. DRAG PANEL
-        // =====================================================
+            console.error(
+                "Failed to initialize tools:",
+                error
+            );
 
-        initDockDragging();
-
-    } catch (error) {
-
-        console.error(
-            "Failed to load tools.json or initialize map:",
-            error
-        );
+        }
 
     }
-});
+);
 
 
 // =============================================================
@@ -87,9 +209,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 function renderHeader(panelData) {
 
     const headerContainer =
-        document.getElementById("panelHeaderContainer");
+        document.getElementById(
+            "panelHeaderContainer"
+        );
+
 
     if (!headerContainer) return;
+
 
     headerContainer.innerHTML = `
 
@@ -98,46 +224,72 @@ function renderHeader(panelData) {
             <div class="panel-brand">
 
                 <div class="brand-mark">
-                    ${panelData.icon || "◈"}
+
+                    ${
+                        panelData.icon ||
+                        "◈"
+                    }
+
                 </div>
+
 
                 <div class="brand-text">
 
                     <div class="panel-title">
-                        ${panelData.title || "TACTICAL SUITE"}
+
+                        ${
+                            panelData.title ||
+                            "TACTICAL SUITE"
+                        }
+
                     </div>
 
+
                     <div class="panel-subtitle">
-                        ${panelData.subtitle || "TACTICAL SYSTEM"}
+
+                        ${
+                            panelData.subtitle ||
+                            "TACTICAL SYSTEM"
+                        }
+
                     </div>
 
                 </div>
 
             </div>
 
+
             <button
                 class="panel-menu"
                 title="Close"
                 onclick="closeTacticalPanel()"
             >
+
                 ×
+
             </button>
 
         </div>
+
     `;
+
 }
 
 
 // =============================================================
-// HORIZONTAL CATEGORY RAIL
+// CATEGORY RAIL
 // =============================================================
 
 function renderRail(sections) {
 
     const rail =
-        document.getElementById("categoryRail");
+        document.getElementById(
+            "categoryRail"
+        );
+
 
     if (!rail) return;
+
 
     let html = `
 
@@ -165,620 +317,1007 @@ function renderRail(sections) {
             </svg>
 
         </div>
+
     `;
 
 
     // =========================================================
-    // CREATE HORIZONTAL CATEGORY BUTTONS
+    // CATEGORY BUTTONS
     // =========================================================
 
-    sections.forEach(section => {
+    sections.forEach(
+        section => {
+
+            html += `
+
+                <button
+
+                    class="rail-btn"
+
+                    data-id="${section.id}"
+
+                    data-tooltip="${section.title}"
+
+                    title="${section.title}"
+
+                    aria-label="Open ${section.title}"
+
+                    onclick="
+                        switchSection(
+                            '${section.id}',
+                            this
+                        )
+                    "
+
+                >
+
+                    <span
+                        class="rail-icon"
+                        aria-hidden="true"
+                    >
+
+                        ${
+                            section.icon ||
+                            "◈"
+                        }
+
+                    </span>
+
+                </button>
+
+            `;
+
+        }
+    );
+
+
+    // =========================================================
+    // DETACH BUTTON
+    // =========================================================
+
+    /*
+     * Only the MAIN page gets the ↗ button.
+     *
+     * tools.html already IS the detached window.
+     */
+
+    if (!isToolsWindow) {
 
         html += `
 
             <button
-                class="rail-btn"
-                data-id="${section.id}"
-                data-tooltip="${section.title}"
-                title="${section.title}"
-                aria-label="Open ${section.title}"
-                onclick="switchSection('${section.id}', this)"
+                id="openToolsButton"
+                class="rail-detach"
+                title="Open tools in another window"
+                aria-label="Open tools in another window"
             >
 
-                <span class="rail-icon" aria-hidden="true">
-                    ${section.icon || "◈"}
-                </span>
+                ↗
 
             </button>
 
         `;
-    });
+
+    }
 
 
-    rail.innerHTML = html + `
-        <button class="rail-close" title="Close panel" aria-label="Close panel" onclick="closeTacticalPanel()">×</button>
+    // =========================================================
+    // CLOSE
+    // =========================================================
+
+    html += `
+
+        <button
+            class="rail-close"
+            title="Close panel"
+            aria-label="Close panel"
+            onclick="closeTacticalPanel()"
+        >
+
+            ×
+
+        </button>
+
     `;
+
+
+    rail.innerHTML =
+        html;
+
+
+    // =========================================================
+    // DETACH BUTTON EVENT
+    // =========================================================
+
+    if (!isToolsWindow) {
+
+        const button =
+            document.getElementById(
+                "openToolsButton"
+            );
+
+
+        if (
+            button &&
+            window.openToolsWindow
+        ) {
+
+            button.addEventListener(
+                "click",
+                window.openToolsWindow
+            );
+
+        }
+
+    }
+
 }
 
+
+// =============================================================
+// RAIL SCROLLING
+// =============================================================
+
 function initRailScrolling() {
-    const rail = document.getElementById("categoryRail");
+
+    const rail =
+        document.getElementById(
+            "categoryRail"
+        );
+
+
     if (!rail) return;
+
 
     let startX = 0;
     let startScroll = 0;
     let dragged = false;
     let pointerId = null;
 
-    rail.addEventListener("pointerdown", event => {
-        if (!event.target.closest(".rail-btn")) return;
-        startX = event.clientX;
-        startScroll = rail.scrollLeft;
-        dragged = false;
-        pointerId = event.pointerId;
-    });
 
-    rail.addEventListener("pointermove", event => {
-        if (event.pointerId !== pointerId) return;
-        const distance = event.clientX - startX;
-        if (Math.abs(distance) > 4 && !dragged) {
-            dragged = true;
-            rail.setPointerCapture(event.pointerId);
-            rail.classList.add("is-dragging");
+    rail.addEventListener(
+        "pointerdown",
+        event => {
+
+            if (
+                !event.target.closest(
+                    ".rail-btn"
+                )
+            ) {
+                return;
+            }
+
+
+            startX =
+                event.clientX;
+
+
+            startScroll =
+                rail.scrollLeft;
+
+
+            dragged =
+                false;
+
+
+            pointerId =
+                event.pointerId;
+
         }
-        if (dragged) rail.scrollLeft = startScroll - distance;
-    });
+    );
 
-    const stopDragging = event => {
-        if (dragged && rail.hasPointerCapture(event.pointerId)) {
-            rail.releasePointerCapture(event.pointerId);
+
+    rail.addEventListener(
+        "pointermove",
+        event => {
+
+            if (
+                event.pointerId !==
+                pointerId
+            ) {
+                return;
+            }
+
+
+            const distance =
+                event.clientX -
+                startX;
+
+
+            if (
+                Math.abs(distance) > 4 &&
+                !dragged
+            ) {
+
+                dragged =
+                    true;
+
+
+                rail.setPointerCapture(
+                    event.pointerId
+                );
+
+
+                rail.classList.add(
+                    "is-dragging"
+                );
+
+            }
+
+
+            if (dragged) {
+
+                rail.scrollLeft =
+                    startScroll -
+                    distance;
+
+            }
+
         }
-        pointerId = null;
-        rail.classList.remove("is-dragging");
-    };
+    );
 
-    rail.addEventListener("pointerup", stopDragging);
-    rail.addEventListener("pointercancel", stopDragging);
 
-    rail.addEventListener("click", event => {
-        if (!dragged) return;
-        event.preventDefault();
-        event.stopPropagation();
-        dragged = false;
-    }, true);
+    const stopDragging =
+        event => {
 
-    rail.addEventListener("pointerover", event => {
-        const button = event.target.closest(".rail-btn");
-        if (!button || button.contains(event.relatedTarget)) return;
-        const tip = document.createElement("div");
-        tip.className = "rail-tooltip";
-        tip.textContent = button.dataset.tooltip;
-        const rect = button.getBoundingClientRect();
-        tip.style.left = `${rect.left + rect.width / 2}px`;
-        tip.style.top = `${rect.bottom + 8}px`;
-        document.body.appendChild(tip);
-        button._railTooltip = tip;
-    });
+            if (
+                dragged &&
+                rail.hasPointerCapture(
+                    event.pointerId
+                )
+            ) {
 
-    rail.addEventListener("pointerout", event => {
-        const button = event.target.closest(".rail-btn");
-        if (button && !button.contains(event.relatedTarget)) {
-            button._railTooltip?.remove();
-            button._railTooltip = null;
-        }
-    });
+                rail.releasePointerCapture(
+                    event.pointerId
+                );
+
+            }
+
+
+            pointerId =
+                null;
+
+
+            rail.classList.remove(
+                "is-dragging"
+            );
+
+        };
+
+
+    rail.addEventListener(
+        "pointerup",
+        stopDragging
+    );
+
+
+    rail.addEventListener(
+        "pointercancel",
+        stopDragging
+    );
+
+
+    rail.addEventListener(
+        "click",
+        event => {
+
+            if (!dragged) return;
+
+
+            event.preventDefault();
+            event.stopPropagation();
+
+
+            dragged =
+                false;
+
+        },
+        true
+    );
+
 }
 
 
 // =============================================================
-// RENDER ALL SECTIONS
+// RENDER SECTIONS
 // =============================================================
 
 function renderSections(sections) {
 
     const container =
-        document.getElementById("dynamicPanelContent");
+        document.getElementById(
+            "dynamicPanelContent"
+        );
+
 
     if (!container) return;
 
-    container.innerHTML = "";
+
+    container.innerHTML =
+        "";
 
 
-    sections.forEach(section => {
+    sections.forEach(
+        section => {
 
-        const sectionEl =
-            document.createElement("div");
-
-        sectionEl.id =
-            `section-${section.id}`;
-
-        sectionEl.className =
-            "drawer-section";
-
-        sectionEl.dataset.section =
-            section.id;
-
-        sectionEl.style.display = "none";
+            const sectionEl =
+                document.createElement(
+                    "div"
+                );
 
 
-        // =====================================================
-        // SECTION TITLE
-        // =====================================================
-
-        let html = `
-
-            <div class="drawer-section-header">
-
-                <div class="drawer-section-title">
-
-                    <span class="sec-icon">
-                        ${section.icon || "◈"}
-                    </span>
-
-                    <span>
-                        ${section.title}
-                    </span>
-
-                </div>
-
-            </div>
-
-        `;
+            sectionEl.id =
+                `section-${section.id}`;
 
 
-        // =====================================================
-        // SYMBOLS
-        // =====================================================
+            sectionEl.className =
+                "drawer-section";
 
-        if (section.id === "symbols") {
 
-            html += `
+            sectionEl.dataset.section =
+                section.id;
 
-                <div class="search-box">
 
-                    <span class="search-icon">
-                        🔍
-                    </span>
+            sectionEl.style.display =
+                "none";
 
-                    <input
-                        type="text"
-                        id="symbolSearch"
-                        class="search-input"
-                        placeholder="Search radar, SAM, tank..."
-                        onkeyup="filterCards()"
-                    >
+
+            let html = `
+
+                <div class="drawer-section-header">
+
+                    <div class="drawer-section-title">
+
+                        <span class="sec-icon">
+
+                            ${
+                                section.icon ||
+                                "◈"
+                            }
+
+                        </span>
+
+
+                        <span>
+
+                            ${section.title}
+
+                        </span>
+
+                    </div>
 
                 </div>
-
-
-                <div
-                    class="filter-pills"
-                    id="symbolFilterPills"
-                >
-
-                    <button
-                        class="filter-pill active"
-                        onclick="filterCategory('all', this)"
-                    >
-                        ALL
-                    </button>
 
             `;
 
 
-            let allSymbols = [];
+            // =================================================
+            // SYMBOLS
+            // =================================================
+
+            if (
+                section.id === "symbols"
+            ) {
+
+                html += `
+
+                    <div class="search-box">
+
+                        <span class="search-icon">
+                            🔍
+                        </span>
 
 
-            section.items.forEach(category => {
+                        <input
 
-                if (category.symbols) {
+                            type="text"
 
-                    html += `
+                            id="symbolSearch"
+
+                            class="search-input"
+
+                            placeholder="Search radar, SAM, tank..."
+
+                            onkeyup="filterCards()"
+
+                        >
+
+                    </div>
+
+
+                    <div
+                        class="filter-pills"
+                        id="symbolFilterPills"
+                    >
 
                         <button
-                            class="filter-pill"
-                            onclick="filterCategory(
-                                '${category.id}',
-                                this
-                            )"
+                            class="filter-pill active"
+                            onclick="
+                                filterCategory(
+                                    'all',
+                                    this
+                                )
+                            "
                         >
-                            ${category.label.toUpperCase()}
+
+                            ALL
+
                         </button>
 
-                    `;
+                `;
 
 
-                    category.symbols.forEach(symbol => {
-
-                        allSymbols.push({
-
-                            ...symbol,
-
-                            categoryId:
-                                category.id,
-
-                            categoryLabel:
-                                category.label
-
-                        });
-
-                    });
-
-                }
-
-            });
+                let allSymbols =
+                    [];
 
 
-            html += `
+                section.items.forEach(
+                    category => {
 
-                </div>
+                        if (
+                            category.symbols
+                        ) {
 
-                <div class="symbol-card-grid">
+                            html += `
 
-            `;
+                                <button
+
+                                    class="filter-pill"
+
+                                    onclick="
+                                        filterCategory(
+                                            '${category.id}',
+                                            this
+                                        )
+                                    "
+                                >
+
+                                    ${
+                                        category.label
+                                            .toUpperCase()
+                                    }
+
+                                </button>
+
+                            `;
 
 
-            // =================================================
-            // SYMBOL CARDS
-            // =================================================
+                            category.symbols.forEach(
+                                symbol => {
 
-            allSymbols.forEach(symbol => {
+                                    allSymbols.push({
 
-                const svgIcon =
-                    createMilSymbolSVG(
-                        symbol.sidc,
-                        34
-                    );
+                                        ...symbol,
+
+                                        categoryId:
+                                            category.id,
+
+                                        categoryLabel:
+                                            category.label
+
+                                    });
+
+                                }
+                            );
+
+                        }
+
+                    }
+                );
 
 
                 html += `
 
-                    <div
-                        class="tactical-symbol-card"
-                        data-category="${symbol.categoryId}"
-                        data-name="${symbol.name}"
-                        onclick="selectSymbolCard(
-                            this,
-                            '${symbol.name}',
-                            '${symbol.sidc}'
-                        )"
-                    >
-
-                        <div class="card-top">
-
-                            <span class="card-tag">
-                                ${symbol.categoryLabel.toUpperCase()}
-                            </span>
-
-                            <span class="status-led"></span>
-
-                        </div>
-
-
-                        <div class="card-glyph-box">
-
-                            ${svgIcon}
-
-                        </div>
-
-
-                        <div class="card-bottom">
-
-                            <span class="card-label">
-                                ${symbol.name}
-                            </span>
-
-                        </div>
-
                     </div>
+
+                    <div class="symbol-card-grid">
 
                 `;
 
-            });
 
+                allSymbols.forEach(
+                    symbol => {
 
-            html += `</div>`;
+                        const svgIcon =
+                            createMilSymbolSVG(
+                                symbol.sidc,
+                                34
+                            );
 
-        }
-
-
-        // =====================================================
-        // OTHER SECTIONS
-        // =====================================================
-
-        else {
-
-            let buttonGridActive = false;
-            let buttonIndex = 0;
-
-
-            section.items.forEach((item, index) => {
-
-                const isWide =
-                    item.wide ? " wide" : "";
-
-
-                // =================================================
-                // BUTTON / MODE
-                // =================================================
-
-                if (
-                    item.type === "button" ||
-                    item.type === "mode"
-                ) {
-
-                    if (!buttonGridActive) {
 
                         html += `
-                            <div class="button-grid">
+
+                            <div
+
+                                class="tactical-symbol-card"
+
+                                data-category="${symbol.categoryId}"
+
+                                data-name="${symbol.name}"
+
+                                onclick="
+                                    selectSymbolCard(
+                                        this,
+                                        '${symbol.name}',
+                                        '${symbol.sidc}'
+                                    )
+                                "
+
+                            >
+
+                                <div class="card-top">
+
+                                    <span class="card-tag">
+
+                                        ${
+                                            symbol.categoryLabel
+                                                .toUpperCase()
+                                        }
+
+                                    </span>
+
+
+                                    <span class="status-led"></span>
+
+                                </div>
+
+
+                                <div class="card-glyph-box">
+
+                                    ${svgIcon}
+
+                                </div>
+
+
+                                <div class="card-bottom">
+
+                                    <span class="card-label">
+
+                                        ${symbol.name}
+
+                                    </span>
+
+                                </div>
+
+                            </div>
+
                         `;
 
-                        buttonGridActive = true;
-                        buttonIndex = 0;
                     }
-
-                    const buttonSide =
-                        buttonIndex++ % 2
-                            ? " button-right"
-                            : " button-left";
+                );
 
 
-                    const isReset =
-                        (item.id || "")
-                            .toLowerCase()
-                            .includes("reset") ||
+                html +=
+                    `</div>`;
 
-                        (item.label || "")
-                            .toLowerCase()
-                            .includes("reset");
+            }
 
 
-                    const dangerClass =
-                        isReset
-                            ? " danger-action"
-                            : "";
+            // =================================================
+            // OTHER SECTIONS
+            // =================================================
+
+            else {
+
+                let buttonGridActive =
+                    false;
 
 
-                    const isAction =
-                        (item.id || "")
-                            .toLowerCase()
-                            .includes("undo") ||
-
-                        (item.id || "")
-                            .toLowerCase()
-                            .includes("redo") ||
-
-                        isReset;
+                let buttonIndex =
+                    0;
 
 
-                    const clickAction =
-                        isAction
+                section.items.forEach(
+                    (item, index) => {
 
-                            ? `performAction(
-                                '${item.id || item.label}',
-                                '${item.label}'
-                              )`
-
-                            : `selectOption(
-                                this,
-                                '${item.id}',
-                                '${item.label}'
-                              )`;
+                        const isWide =
+                            item.wide
+                                ? " wide"
+                                : "";
 
 
-                    html += `
+                        // =====================================
+                        // BUTTON / MODE
+                        // =====================================
 
-                        <button
-                            class="tool-button${isWide}${dangerClass}${buttonSide}"
-                            onclick="${clickAction}"
-                        >
+                        if (
+                            item.type === "button" ||
+                            item.type === "mode"
+                        ) {
 
-                            <span class="button-icon">
-                                ${item.icon || "◈"}
-                            </span>
+                            if (
+                                !buttonGridActive
+                            ) {
 
-                            <span>
-                                ${item.label}
-                            </span>
-
-                        </button>
-
-                    `;
-                }
+                                html += `
+                                    <div class="button-grid">
+                                `;
 
 
-                // =================================================
-                // TOGGLE
-                // =================================================
-
-                else if (item.type === "toggle") {
-
-                    if (buttonGridActive) {
-
-                        html += `</div>`;
-
-                        buttonGridActive = false;
-                    }
+                                buttonGridActive =
+                                    true;
 
 
-                    const onText =
-                        item.onLabel ||
-                        `${item.label}: ON`;
+                                buttonIndex =
+                                    0;
+
+                            }
 
 
-                    const offText =
-                        item.offLabel ||
-                        `${item.label}: OFF`;
+                            const buttonSide =
+                                buttonIndex++ % 2
+                                    ? " button-right"
+                                    : " button-left";
 
 
-                    html += `
+                            const isReset =
+                                (
+                                    item.id ||
+                                    ""
+                                )
+                                    .toLowerCase()
+                                    .includes(
+                                        "reset"
+                                    ) ||
 
-                        <button
-                            id="${item.id}Button"
-                            class="tactical-toggle-btn${isWide}"
-                            data-enabled="${item.value}"
-                            onclick="toggleMaskSetting(
-                                this,
-                                '${item.id}',
-                                '${onText}',
-                                '${offText}'
-                            )"
-                        >
-
-                            <span class="toggle-text">
-                                ${
-                                    item.value
-                                        ? onText
-                                        : offText
-                                }
-                            </span>
-
-                            <div class="toggle-indicator"></div>
-
-                        </button>
-
-                    `;
-                }
+                                (
+                                    item.label ||
+                                    ""
+                                )
+                                    .toLowerCase()
+                                    .includes(
+                                        "reset"
+                                    );
 
 
-                // =================================================
-                // NUMBER / SLIDER
-                // =================================================
-
-                else if (item.type === "number") {
-
-                    if (buttonGridActive) {
-
-                        html += `</div>`;
-
-                        buttonGridActive = false;
-                    }
+                            const dangerClass =
+                                isReset
+                                    ? " danger-action"
+                                    : "";
 
 
-                    let minVal = 0;
+                            const isAction =
+                                (
+                                    item.id ||
+                                    ""
+                                )
+                                    .toLowerCase()
+                                    .includes(
+                                        "undo"
+                                    ) ||
 
-                    let maxVal =
-                        item.id === "radius"
-                            ? 5000
-                            : item.id === "power"
-                            ? 50
-                            : item.id === "maxHeight"
-                            ? 2000
-                            : 1000;
+                                (
+                                    item.id ||
+                                    ""
+                                )
+                                    .toLowerCase()
+                                    .includes(
+                                        "redo"
+                                    ) ||
 
-
-                    if (item.id === "radius") {
-                        minVal = 100;
-                    }
-
-
-                    html += `
-
-                        <div class="slider-control-card">
-
-                            <div class="slider-top-row">
-
-                                <span class="slider-label">
-                                    ${item.label}
-                                </span>
-
-                                <span
-                                    class="slider-number"
-                                    id="${item.id}Value"
-                                >
-                                    ${item.value}
-                                    ${item.unit || ""}
-                                </span>
-
-                            </div>
+                                isReset;
 
 
-                            <div class="slider-bottom-row">
+                            const clickAction =
+                                isAction
+
+                                    ? `performAction(
+                                        '${item.id || item.label}',
+                                        '${item.label}'
+                                      )`
+
+                                    : `selectOption(
+                                        this,
+                                        '${item.id}',
+                                        '${item.label}'
+                                      )`;
+
+
+                            html += `
 
                                 <button
-                                    class="mini-stepper-btn"
-                                    onclick="stepValue(
-                                        '${item.id}',
-                                        -${item.step || 1},
-                                        '${item.unit || ""}'
-                                    )"
+
+                                    class="tool-button${isWide}${dangerClass}${buttonSide}"
+
+                                    onclick="${clickAction}"
+
                                 >
-                                    −
+
+                                    <span class="button-icon">
+
+                                        ${
+                                            item.icon ||
+                                            "◈"
+                                        }
+
+                                    </span>
+
+
+                                    <span>
+
+                                        ${item.label}
+
+                                    </span>
+
                                 </button>
 
+                            `;
 
-                                <input
-                                    type="range"
-                                    class="cyber-range-input"
-                                    id="${item.id}Slider"
-                                    min="${minVal}"
-                                    max="${maxVal}"
-                                    step="${item.step || 1}"
-                                    value="${item.value}"
-                                    oninput="sliderChange(
-                                        '${item.id}',
-                                        this.value,
-                                        '${item.unit || ""}'
-                                    )"
-                                >
+                        }
 
+
+                        // =====================================
+                        // TOGGLE
+                        // =====================================
+
+                        else if (
+                            item.type === "toggle"
+                        ) {
+
+                            if (
+                                buttonGridActive
+                            ) {
+
+                                html +=
+                                    `</div>`;
+
+
+                                buttonGridActive =
+                                    false;
+
+                            }
+
+
+                            const onText =
+                                item.onLabel ||
+                                `${item.label}: ON`;
+
+
+                            const offText =
+                                item.offLabel ||
+                                `${item.label}: OFF`;
+
+
+                            html += `
 
                                 <button
-                                    class="mini-stepper-btn"
-                                    onclick="stepValue(
-                                        '${item.id}',
-                                        ${item.step || 1},
-                                        '${item.unit || ""}'
-                                    )"
+
+                                    id="${item.id}Button"
+
+                                    class="tactical-toggle-btn${isWide}"
+
+                                    data-enabled="${item.value}"
+
+                                    onclick="
+                                        toggleMaskSetting(
+                                            this,
+                                            '${item.id}',
+                                            '${onText}',
+                                            '${offText}'
+                                        )
+                                    "
+
                                 >
-                                    +
+
+                                    <span class="toggle-text">
+
+                                        ${
+                                            item.value
+                                                ? onText
+                                                : offText
+                                        }
+
+                                    </span>
+
+
+                                    <div class="toggle-indicator"></div>
+
                                 </button>
 
-                            </div>
+                            `;
 
-                        </div>
-
-                    `;
-                }
+                        }
 
 
-                // =================================================
-                // CLOSE BUTTON GRID
-                // =================================================
+                        // =====================================
+                        // NUMBER / SLIDER
+                        // =====================================
 
-                if (
-                    index === section.items.length - 1 &&
-                    buttonGridActive
-                ) {
+                        else if (
+                            item.type === "number"
+                        ) {
 
-                    html += `</div>`;
+                            if (
+                                buttonGridActive
+                            ) {
 
-                }
+                                html +=
+                                    `</div>`;
 
-            });
+
+                                buttonGridActive =
+                                    false;
+
+                            }
+
+
+                            let minVal =
+                                0;
+
+
+                            let maxVal =
+                                item.id === "radius"
+                                    ? 5000
+
+                                    : item.id === "power"
+                                    ? 50
+
+                                    : item.id === "maxHeight"
+                                    ? 2000
+
+                                    : 1000;
+
+
+                            if (
+                                item.id === "radius"
+                            ) {
+
+                                minVal =
+                                    100;
+
+                            }
+
+
+                            html += `
+
+                                <div class="slider-control-card">
+
+                                    <div class="slider-top-row">
+
+                                        <span class="slider-label">
+
+                                            ${item.label}
+
+                                        </span>
+
+
+                                        <span
+
+                                            class="slider-number"
+
+                                            id="${item.id}Value"
+
+                                        >
+
+                                            ${item.value}
+                                            ${item.unit || ""}
+
+                                        </span>
+
+                                    </div>
+
+
+                                    <div class="slider-bottom-row">
+
+                                        <button
+
+                                            class="mini-stepper-btn"
+
+                                            onclick="
+                                                stepValue(
+                                                    '${item.id}',
+                                                    -${item.step || 1},
+                                                    '${item.unit || ""}'
+                                                )
+                                            "
+
+                                        >
+
+                                            −
+
+                                        </button>
+
+
+                                        <input
+
+                                            type="range"
+
+                                            class="cyber-range-input"
+
+                                            id="${item.id}Slider"
+
+                                            min="${minVal}"
+
+                                            max="${maxVal}"
+
+                                            step="${item.step || 1}"
+
+                                            value="${item.value}"
+
+                                            oninput="
+                                                sliderChange(
+                                                    '${item.id}',
+                                                    this.value,
+                                                    '${item.unit || ""}'
+                                                )
+                                            "
+
+                                        >
+
+
+                                        <button
+
+                                            class="mini-stepper-btn"
+
+                                            onclick="
+                                                stepValue(
+                                                    '${item.id}',
+                                                    ${item.step || 1},
+                                                    '${item.unit || ""}'
+                                                )
+                                            "
+
+                                        >
+
+                                            +
+
+                                        </button>
+
+                                    </div>
+
+                                </div>
+
+                            `;
+
+                        }
+
+
+                        // =====================================
+                        // CLOSE BUTTON GRID
+                        // =====================================
+
+                        if (
+                            index ===
+                                section.items.length - 1 &&
+                            buttonGridActive
+                        ) {
+
+                            html +=
+                                `</div>`;
+
+                        }
+
+                    }
+                );
+
+            }
+
+
+            sectionEl.innerHTML =
+                html;
+
+
+            container.appendChild(
+                sectionEl
+            );
 
         }
+    );
 
-
-        // =====================================================
-        // ADD SECTION TO DOM
-        // =====================================================
-
-        sectionEl.innerHTML = html;
-
-        container.appendChild(sectionEl);
-
-    });
 }
 
 
 // =============================================================
-// MILSYMBOL SVG
+// MILSYMBOL
 // =============================================================
 
-function createMilSymbolSVG(sidc, size = 34) {
+function createMilSymbolSVG(
+    sidc,
+    size = 34
+) {
 
     if (
-        typeof ms !== "undefined" &&
+        ms &&
         ms.Symbol
     ) {
 
@@ -799,7 +1338,7 @@ function createMilSymbolSVG(sidc, size = 34) {
             height="${size}"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#66c7a5"
+            stroke="currentColor"
             stroke-width="2"
         >
 
@@ -816,6 +1355,7 @@ function createMilSymbolSVG(sidc, size = 34) {
         </svg>
 
     `;
+
 }
 
 
@@ -830,54 +1370,89 @@ function initDockDragging() {
             ".tactical-menu-dock"
         );
 
+
     const header =
         document.querySelector(
             ".category-rail"
         );
 
 
-    if (!dock || !header) return;
+    if (
+        !dock ||
+        !header
+    ) {
+        return;
+    }
 
 
-    let isDragging = false;
-
-    let startX = 0;
-    let startY = 0;
-
-    let initialLeft = 0;
-    let initialTop = 0;
+    let isDragging =
+        false;
 
 
-    header.style.cursor = "move";
+    let startX =
+        0;
+
+
+    let startY =
+        0;
+
+
+    let initialLeft =
+        0;
+
+
+    let initialTop =
+        0;
+
+
+    header.style.cursor =
+        "move";
 
 
     header.addEventListener(
         "mousedown",
         event => {
 
-            if (event.target.closest(".rail-btn, .rail-close")) {
+            if (
+                event.target.closest(
+                    ".rail-btn, .rail-close, .rail-detach"
+                )
+            ) {
                 return;
             }
 
 
-            isDragging = true;
+            isDragging =
+                true;
 
-            startX = event.clientX;
-            startY = event.clientY;
+
+            startX =
+                event.clientX;
+
+
+            startY =
+                event.clientY;
 
 
             const rect =
                 dock.getBoundingClientRect();
 
 
-            initialLeft = rect.left;
-            initialTop = rect.top;
+            initialLeft =
+                rect.left;
 
 
-            dock.style.position = "fixed";
+            initialTop =
+                rect.top;
+
+
+            dock.style.position =
+                "fixed";
+
 
             dock.style.left =
                 `${initialLeft}px`;
+
 
             dock.style.top =
                 `${initialTop}px`;
@@ -887,6 +1462,7 @@ function initDockDragging() {
                 "mousemove",
                 onMouseMove
             );
+
 
             document.addEventListener(
                 "mouseup",
@@ -903,29 +1479,36 @@ function initDockDragging() {
 
 
         const dx =
-            event.clientX - startX;
+            event.clientX -
+            startX;
+
 
         const dy =
-            event.clientY - startY;
+            event.clientY -
+            startY;
 
 
         dock.style.left =
             `${initialLeft + dx}px`;
 
+
         dock.style.top =
             `${initialTop + dy}px`;
+
     }
 
 
     function onMouseUp() {
 
-        isDragging = false;
+        isDragging =
+            false;
 
 
         document.removeEventListener(
             "mousemove",
             onMouseMove
         );
+
 
         document.removeEventListener(
             "mouseup",
@@ -938,46 +1521,14 @@ function initDockDragging() {
 
 
 // =============================================================
-// CLOSE PANEL
+// EXPORT
 // =============================================================
 
-function closeTacticalPanel() {
+window.renderHeader =
+    renderHeader;
 
-    const dock =
-        document.querySelector(
-            ".tactical-menu-dock"
-        );
+window.renderRail =
+    renderRail;
 
-    if (!dock) return;
-
-
-    dock.classList.remove("panel-open");
-
-
-    document
-        .querySelectorAll(".rail-btn")
-        .forEach(button => {
-
-            button.classList.remove("active");
-
-        });
-
-
-    document
-        .querySelectorAll(".drawer-section")
-        .forEach(section => {
-
-            section.style.display = "none";
-
-        });
-
-}
-
-
-// =============================================================
-// GLOBAL FUNCTIONS
-// =============================================================
-
-window.closeTacticalPanel =
-    closeTacticalPanel;
-
+window.renderSections =
+    renderSections;

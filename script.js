@@ -1,186 +1,623 @@
-/* =====================================================
-   SECTION SWITCHING
-===================================================== */
+// =========================================================
+// TOOLS WINDOW COMMUNICATION
+// =========================================================
 
-function switchSection(sectionId, btn) {
+const toolsChannel =
+    new BroadcastChannel(
+        "tactical-tools-channel"
+    );
 
-    const dock = document.querySelector(".tactical-menu-dock");
 
-    const clickedButton = btn ||
-        document.querySelector(`.rail-btn[data-id="${sectionId}"]`);
+window.toolsChannel =
+    toolsChannel;
 
-    const target = document.getElementById(`section-${sectionId}`);
 
-    if (!dock || !target) return;
+const isToolsWindow =
+    window.location.pathname.endsWith(
+        "tools.html"
+    );
+
+
+console.log(
+    "BroadcastChannel initialized"
+);
+
+
+console.log(
+    "PAGE:",
+    isToolsWindow
+        ? "TOOLS WINDOW"
+        : "MAIN MAP"
+);
+
+
+// =========================================================
+// DETACHED WINDOW
+// =========================================================
+
+let toolsWindow =
+    null;
+
+
+// =========================================================
+// RECEIVE BROADCAST MESSAGES
+// =========================================================
+
+toolsChannel.onmessage =
+    event => {
+
+        console.log(
+            "MESSAGE RECEIVED:",
+            event.data
+        );
+
+
+        const data =
+            event.data;
+
+
+        if (
+            !data ||
+            !data.type
+        ) {
+            return;
+        }
+
+
+        // =====================================================
+        // TOOLS WINDOW READY
+        // =====================================================
+
+        if (
+            data.type ===
+            "TOOLS_WINDOW_READY"
+        ) {
+
+            console.log(
+                "TOOLS WINDOW READY"
+            );
+
+
+            /*
+             * Main panel is hidden when opening.
+             *
+             * This is just a safety check.
+             */
+
+            if (!isToolsWindow) {
+
+                const dock =
+                    document.querySelector(
+                        ".tactical-menu-dock"
+                    );
+
+
+                if (dock) {
+
+                    dock.style.display =
+                        "none";
+
+                }
+
+            }
+
+
+            return;
+        }
+
+
+        // =====================================================
+        // TOOL SELECTED
+        // =====================================================
+
+        if (
+            data.type ===
+            "TOOL_SELECTED"
+        ) {
+
+            /*
+             * Only the MAIN page should
+             * react to the detached tool.
+             */
+
+            if (
+                isToolsWindow
+            ) {
+                return;
+            }
+
+
+            console.log(
+                "MAP RECEIVED TOOL:",
+                data
+            );
+
+
+            showNotification(
+                data.name
+            );
+
+
+            setStatus(
+                `${data.name} selected`
+            );
+
+
+            /*
+             * Save latest state.
+             */
+
+            window.selectedToolState =
+                data;
+
+
+            /*
+             * Symbol selection.
+             */
+
+            if (
+                data.id ===
+                "symbol"
+            ) {
+
+                window.selectedTacticalSymbol = {
+
+                    name:
+                        data.name,
+
+                    sidc:
+                        data.sidc
+
+                };
+
+            }
+
+
+            /*
+             * Mask state.
+             */
+
+            if (
+                data.enabled !==
+                undefined
+            ) {
+
+                window.maskSettings =
+                    window.maskSettings ||
+                    {};
+
+
+                window.maskSettings[
+                    data.id
+                ] =
+                    data.enabled;
+
+            }
+
+
+            return;
+        }
+
+    };
+
+
+// =========================================================
+// OPEN TOOLS WINDOW
+// =========================================================
+
+function openToolsWindow() {
+
+    if (
+        toolsWindow &&
+        !toolsWindow.closed
+    ) {
+
+        toolsWindow.focus();
+
+        return;
+
+    }
+
+
+    const dock =
+        document.querySelector(
+            ".tactical-menu-dock"
+        );
+
+
+    if (!dock) {
+
+        console.error(
+            "Main tools dock not found"
+        );
+
+        return;
+
+    }
+
+
+    toolsWindow =
+        window.open(
+            "tools.html",
+            "TacticalToolsWindow",
+            "width=420,height=700,resizable=yes"
+        );
+
+
+    if (!toolsWindow) {
+
+        alert(
+            "Please allow popups for this site."
+        );
+
+        return;
+
+    }
+
+
+    /*
+     * Hide ONLY the main page panel.
+     *
+     * We are NOT moving it.
+     */
+
+    dock.style.display =
+        "none";
+
+
+    console.log(
+        "Detached tools window opened"
+    );
+
+
+    /*
+     * Monitor detached window.
+     */
+
+    const checkClosed =
+        setInterval(
+            () => {
+
+                if (
+                    !toolsWindow ||
+                    toolsWindow.closed
+                ) {
+
+                    clearInterval(
+                        checkClosed
+                    );
+
+
+                    toolsWindow =
+                        null;
+
+
+                    /*
+                     * Bring the main panel back.
+                     */
+
+                    dock.style.display =
+                        "";
+
+
+                    dock.classList.add(
+                        "panel-open"
+                    );
+
+
+                    console.log(
+                        "Tools window closed"
+                    );
+
+
+                    setStatus(
+                        "Terrain editor ready"
+                    );
+
+                }
+
+            },
+            500
+        );
+
+}
+
+
+// =========================================================
+// GLOBAL
+// =========================================================
+
+window.openToolsWindow =
+    openToolsWindow;
+
+
+// =========================================================
+// OPEN BUTTON
+// =========================================================
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+
+        const openButton =
+            document.getElementById(
+                "openToolsButton"
+            );
+
+
+        if (openButton) {
+
+            openButton.addEventListener(
+                "click",
+                openToolsWindow
+            );
+
+        }
+
+
+        /*
+         * Detached page tells the main page
+         * that it has finished rendering.
+         */
+
+        if (
+            isToolsWindow
+        ) {
+
+            setTimeout(
+                () => {
+
+                    toolsChannel.postMessage({
+
+                        type:
+                            "TOOLS_WINDOW_READY"
+
+                    });
+
+
+                    console.log(
+                        "TOOLS WINDOW READY SENT"
+                    );
+
+                },
+                300
+            );
+
+        }
+
+    }
+);
+
+
+// =========================================================
+// SECTION SWITCHING
+// =========================================================
+
+function switchSection(
+    sectionId,
+    btn
+) {
+
+    const dock =
+        document.querySelector(
+            ".tactical-menu-dock"
+        );
+
+
+    const clickedButton =
+        btn ||
+        document.querySelector(
+            `.rail-btn[data-id="${sectionId}"]`
+        );
+
+
+    const target =
+        document.getElementById(
+            `section-${sectionId}`
+        );
+
+
+    if (
+        !dock ||
+        !target
+    ) {
+        return;
+    }
 
 
     const alreadyOpen =
         clickedButton &&
-        clickedButton.classList.contains("active");
+        clickedButton.classList.contains(
+            "active"
+        );
 
-
-    /* =================================================
-       CLICK SAME CATEGORY
-       → CLOSE PANEL
-    ================================================= */
 
     if (alreadyOpen) {
 
         closeTacticalPanel();
 
         return;
+
     }
 
 
-    /* =================================================
-       REMOVE ACTIVE FROM ALL CATEGORY BUTTONS
-    ================================================= */
+    document
+        .querySelectorAll(
+            ".rail-btn"
+        )
+        .forEach(
+            button => {
+
+                button.classList.remove(
+                    "active"
+                );
+
+            }
+        );
+
 
     document
-        .querySelectorAll(".rail-btn")
-        .forEach(button => {
-            button.classList.remove("active");
-        });
+        .querySelectorAll(
+            ".drawer-section"
+        )
+        .forEach(
+            section => {
+
+                section.classList.remove(
+                    "section-visible"
+                );
 
 
-    /* =================================================
-       HIDE ALL SECTIONS
-    ================================================= */
-
-    const previousSection =
-        dock.querySelector(".drawer-section.section-visible");
-
-    const direction = previousSection &&
-        previousSection.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING
-        ? "section-from-left"
-        : "section-from-right";
-
-    document
-        .querySelectorAll(".drawer-section")
-        .forEach(section => {
-
-            section.classList.remove("section-visible");
-            section.classList.remove("section-from-left", "section-from-right");
-
-            section.style.display = "none";
-
-        });
+                section.classList.remove(
+                    "section-from-left",
+                    "section-from-right"
+                );
 
 
-    /* =================================================
-       ACTIVATE CLICKED CATEGORY
-    ================================================= */
+                section.style.display =
+                    "none";
+
+            }
+        );
+
 
     if (clickedButton) {
-        clickedButton.classList.add("active");
+
+        clickedButton.classList.add(
+            "active"
+        );
+
     }
 
 
-    /* =================================================
-       OPEN PANEL
-    ================================================= */
-
-    dock.classList.add("panel-open");
+    dock.classList.add(
+        "panel-open"
+    );
 
 
-    /* =================================================
-       SHOW TARGET SECTION
-    ================================================= */
-
-    target.style.display = "flex";
-    target.classList.add(direction);
-    target.classList.remove("section-visible");
+    target.style.display =
+        "flex";
 
 
-    /*
-     * Force browser to register the hidden state
-     * before starting the animation.
-     */
-
-    requestAnimationFrame(() => {
-
-        target.classList.add("section-visible");
-
-    });
+    target.classList.add(
+        "section-from-right"
+    );
 
 
-    setStatus(`Opened ${sectionId.toUpperCase()}`);
+    requestAnimationFrame(
+        () => {
+
+            target.classList.add(
+                "section-visible"
+            );
+
+        }
+    );
+
+
+    setStatus(
+        `Opened ${sectionId.toUpperCase()}`
+    );
+
 }
 
 
-/* =====================================================
-   CLOSE TACTICAL PANEL
-===================================================== */
+// =========================================================
+// CLOSE PANEL
+// =========================================================
 
 function closeTacticalPanel() {
 
     const dock =
-        document.querySelector(".tactical-menu-dock");
+        document.querySelector(
+            ".tactical-menu-dock"
+        );
 
 
     if (!dock) return;
 
 
-    /* Remove active category */
+    document
+        .querySelectorAll(
+            ".rail-btn"
+        )
+        .forEach(
+            button => {
+
+                button.classList.remove(
+                    "active"
+                );
+
+            }
+        );
+
 
     document
-        .querySelectorAll(".rail-btn")
-        .forEach(button => {
+        .querySelectorAll(
+            ".drawer-section"
+        )
+        .forEach(
+            section => {
 
-            button.classList.remove("active");
-
-        });
-
-
-    /* Close all sections */
-
-    document
-        .querySelectorAll(".drawer-section")
-        .forEach(section => {
-
-            section.classList.remove("section-visible");
-
-            section.style.display = "none";
-
-        });
+                section.classList.remove(
+                    "section-visible"
+                );
 
 
-    /* Close dock */
+                section.style.display =
+                    "none";
 
-    dock.classList.remove("panel-open");
-    dock.style.width = "";
-    dock.style.height = "";
+            }
+        );
+
+
+    dock.classList.remove(
+        "panel-open"
+    );
 
 
     hideNotification();
 
-    setStatus("Terrain editor ready");
+
+    setStatus(
+        "Terrain editor ready"
+    );
+
 }
 
 
-/* =====================================================
-   ESCAPE KEY
-===================================================== */
+// =========================================================
+// ESCAPE
+// =========================================================
 
-document.addEventListener("keydown", event => {
+document.addEventListener(
+    "keydown",
+    event => {
 
-    if (event.key === "Escape") {
+        if (
+            event.key ===
+            "Escape"
+        ) {
 
-        closeTacticalPanel();
+            closeTacticalPanel();
+
+        }
 
     }
+);
 
-});
 
-
-/* =====================================================
-   SYMBOL SEARCH
-===================================================== */
+// =========================================================
+// SYMBOL SEARCH
+// =========================================================
 
 function filterCards() {
 
     const input =
-        document.getElementById("symbolSearch");
+        document.getElementById(
+            "symbolSearch"
+        );
+
 
     if (!input) return;
 
@@ -191,162 +628,227 @@ function filterCards() {
             .trim();
 
 
-    const cards =
-        document.querySelectorAll(
+    document
+        .querySelectorAll(
             ".tactical-symbol-card"
+        )
+        .forEach(
+            card => {
+
+                const name =
+                    (
+                        card.dataset.name ||
+                        ""
+                    ).toLowerCase();
+
+
+                const category =
+                    (
+                        card.dataset.category ||
+                        ""
+                    ).toLowerCase();
+
+
+                card.style.display =
+                    name.includes(query) ||
+                    category.includes(query)
+                        ? "flex"
+                        : "none";
+
+            }
         );
-
-
-    cards.forEach(card => {
-
-        const name =
-            (
-                card.getAttribute("data-name") || ""
-            ).toLowerCase();
-
-
-        const category =
-            (
-                card.getAttribute("data-category") || ""
-            ).toLowerCase();
-
-
-        if (
-            name.includes(query) ||
-            category.includes(query)
-        ) {
-
-            card.style.display = "flex";
-
-        } else {
-
-            card.style.display = "none";
-
-        }
-
-    });
 
 }
 
 
-/* =====================================================
-   SYMBOL CATEGORY FILTER
-===================================================== */
+// =========================================================
+// SYMBOL FILTER
+// =========================================================
 
-function filterCategory(catId, pill) {
+function filterCategory(
+    catId,
+    pill
+) {
 
     document
-        .querySelectorAll(".filter-pill")
-        .forEach(button => {
+        .querySelectorAll(
+            ".filter-pill"
+        )
+        .forEach(
+            button => {
 
-            button.classList.remove("active");
+                button.classList.remove(
+                    "active"
+                );
 
-        });
+            }
+        );
 
 
     if (pill) {
-        pill.classList.add("active");
+
+        pill.classList.add(
+            "active"
+        );
+
     }
 
 
-    const cards =
-        document.querySelectorAll(
+    document
+        .querySelectorAll(
             ".tactical-symbol-card"
+        )
+        .forEach(
+            card => {
+
+                const category =
+                    card.dataset.category;
+
+
+                card.style.display =
+                    catId === "all" ||
+                    category === catId
+                        ? "flex"
+                        : "none";
+
+            }
         );
-
-
-    cards.forEach(card => {
-
-        const category =
-            card.getAttribute("data-category");
-
-
-        if (
-            catId === "all" ||
-            category === catId
-        ) {
-
-            card.style.display = "flex";
-
-        } else {
-
-            card.style.display = "none";
-
-        }
-
-    });
 
 }
 
 
-/* =====================================================
-   SYMBOL SELECTION
-===================================================== */
+// =========================================================
+// SYMBOL SELECTION
+// =========================================================
 
-function selectSymbolCard(card, name, sidc) {
+function selectSymbolCard(
+    card,
+    name,
+    sidc
+) {
 
     const wasActive =
-        card.classList.contains("selected");
+        card.classList.contains(
+            "selected"
+        );
 
-
-    /* Remove selection from all symbols */
 
     document
-        .querySelectorAll(".tactical-symbol-card")
-        .forEach(symbolCard => {
+        .querySelectorAll(
+            ".tactical-symbol-card"
+        )
+        .forEach(
+            symbolCard => {
 
-            symbolCard.classList.remove("selected");
+                symbolCard.classList.remove(
+                    "selected"
+                );
 
-        });
+            }
+        );
 
-
-    /* ================================================
-       DESELECT
-    ================================================= */
 
     if (wasActive) {
 
         hideNotification();
 
-        setStatus(`${name} deselected`);
+
+        setStatus(
+            `${name} deselected`
+        );
+
+
+        toolsChannel.postMessage({
+
+            type:
+                "TOOL_SELECTED",
+
+            id:
+                "symbol",
+
+            name:
+                `${name} deselected`,
+
+            sidc:
+                sidc,
+
+            selected:
+                false
+
+        });
+
 
         return;
 
     }
 
 
-    /* ================================================
-       SELECT
-    ================================================= */
+    card.classList.add(
+        "selected"
+    );
 
-    card.classList.add("selected");
 
-    showNotification(name);
+    window.selectedTacticalSymbol = {
 
-    setStatus(`Armed: ${name}`);
+        name:
+            name,
+
+        sidc:
+            sidc
+
+    };
 
 
     /*
-     * Save selected symbol globally.
-     * Useful later when placing it on the map.
+     * Send to MAIN MAP.
      */
 
-    window.selectedTacticalSymbol = {
-        name: name,
-        sidc: sidc
-    };
+    toolsChannel.postMessage({
+
+        type:
+            "TOOL_SELECTED",
+
+        id:
+            "symbol",
+
+        name:
+            name,
+
+        sidc:
+            sidc,
+
+        selected:
+            true
+
+    });
+
+
+    showNotification(
+        name
+    );
+
+
+    setStatus(
+        `Armed: ${name}`
+    );
 
 }
 
 
-/* =====================================================
-   SLIDER CHANGE
-===================================================== */
+// =========================================================
+// SLIDER
+// =========================================================
 
-function sliderChange(id, value, unit) {
+function sliderChange(
+    id,
+    value,
+    unit
+) {
 
     const numEl =
-        document.getElementById(`${id}Value`);
+        document.getElementById(
+            `${id}Value`
+        );
 
 
     if (numEl) {
@@ -357,6 +859,23 @@ function sliderChange(id, value, unit) {
     }
 
 
+    toolsChannel.postMessage({
+
+        type:
+            "TOOL_SELECTED",
+
+        id:
+            id,
+
+        name:
+            `${id}: ${value} ${unit}`,
+
+        value:
+            Number(value)
+
+    });
+
+
     setStatus(
         `${id}: ${value} ${unit}`
     );
@@ -364,21 +883,28 @@ function sliderChange(id, value, unit) {
 }
 
 
-/* =====================================================
-   SLIDER + / -
-===================================================== */
+// =========================================================
+// STEPPER
+// =========================================================
 
-function stepValue(id, delta, unit) {
+function stepValue(
+    id,
+    delta,
+    unit
+) {
 
     const slider =
-        document.getElementById(`${id}Slider`);
+        document.getElementById(
+            `${id}Slider`
+        );
 
 
     if (!slider) return;
 
 
     let newVal =
-        Number(slider.value) + delta;
+        Number(slider.value) +
+        delta;
 
 
     newVal =
@@ -391,11 +917,8 @@ function stepValue(id, delta, unit) {
         );
 
 
-    newVal =
-        Math.round(newVal * 10) / 10;
-
-
-    slider.value = newVal;
+    slider.value =
+        newVal;
 
 
     sliderChange(
@@ -407,9 +930,9 @@ function stepValue(id, delta, unit) {
 }
 
 
-/* =====================================================
-   TOGGLE
-===================================================== */
+// =========================================================
+// MASK / TOGGLE
+// =========================================================
 
 function toggleMaskSetting(
     button,
@@ -419,7 +942,8 @@ function toggleMaskSetting(
 ) {
 
     const isEnabled =
-        button.dataset.enabled === "true";
+        button.dataset.enabled ===
+        "true";
 
 
     const nextState =
@@ -427,7 +951,9 @@ function toggleMaskSetting(
 
 
     button.dataset.enabled =
-        String(nextState);
+        String(
+            nextState
+        );
 
 
     button.classList.toggle(
@@ -436,13 +962,15 @@ function toggleMaskSetting(
     );
 
 
-    const labelSpan =
-        button.querySelector(".toggle-text");
+    const label =
+        button.querySelector(
+            ".toggle-text"
+        );
 
 
-    if (labelSpan) {
+    if (label) {
 
-        labelSpan.textContent =
+        label.textContent =
             nextState
                 ? onText
                 : offText;
@@ -450,10 +978,31 @@ function toggleMaskSetting(
     }
 
 
-    showNotification(
+    const message =
         nextState
             ? onText
-            : offText
+            : offText;
+
+
+    toolsChannel.postMessage({
+
+        type:
+            "TOOL_SELECTED",
+
+        id:
+            id,
+
+        name:
+            message,
+
+        enabled:
+            nextState
+
+    });
+
+
+    showNotification(
+        message
     );
 
 
@@ -468,212 +1017,9 @@ function toggleMaskSetting(
 }
 
 
-/* =====================================================
-   DRAG TO RESIZE
-===================================================== */
-
-function initDockResizer() {
-
-    const dock =
-        document.querySelector(
-            ".tactical-menu-dock"
-        );
-
-
-    if (!dock) return;
-
-
-    let isResizing = false;
-
-    let startX = 0;
-    let startY = 0;
-
-    let startWidth = 0;
-    let startHeight = 0;
-
-
-    const MIN_WIDTH = 320;
-    const MAX_WIDTH = 420;
-
-    const MIN_HEIGHT = 280;
-
-
-    function isResizeGrip(event) {
-
-        const rect =
-            dock.getBoundingClientRect();
-
-
-        return (
-            event.target.id === "dockResizeHandle" ||
-
-            (
-                event.clientX >= rect.right - 24 &&
-                event.clientY >= rect.bottom - 24
-            )
-        );
-
-    }
-
-
-    dock.addEventListener(
-        "pointerdown",
-        event => {
-
-            if (!isResizeGrip(event)) return;
-
-
-            isResizing = true;
-
-
-            startX =
-                event.clientX;
-
-            startY =
-                event.clientY;
-
-
-            startWidth =
-                dock.offsetWidth;
-
-            startHeight =
-                dock.offsetHeight;
-
-
-            dock.classList.add("resizing");
-
-
-            dock.setPointerCapture(
-                event.pointerId
-            );
-
-
-            event.preventDefault();
-
-        }
-    );
-
-
-    dock.addEventListener(
-        "pointermove",
-        event => {
-
-            if (!isResizing) return;
-
-
-            const maxH =
-                window.innerHeight * 0.92;
-
-
-            const newWidth =
-                Math.min(
-                    MAX_WIDTH,
-                    Math.max(
-                        MIN_WIDTH,
-                        startWidth +
-                        (
-                            event.clientX -
-                            startX
-                        )
-                    )
-                );
-
-
-            const newHeight =
-                Math.min(
-                    maxH,
-                    Math.max(
-                        MIN_HEIGHT,
-                        startHeight +
-                        (
-                            event.clientY -
-                            startY
-                        )
-                    )
-                );
-
-
-            dock.style.width =
-                `${newWidth}px`;
-
-
-            dock.style.height =
-                `${newHeight}px`;
-
-        }
-    );
-
-
-    const stopResize = event => {
-
-        if (!isResizing) return;
-
-
-        isResizing = false;
-
-
-        dock.classList.remove(
-            "resizing"
-        );
-
-
-        try {
-
-            dock.releasePointerCapture(
-                event.pointerId
-            );
-
-        } catch (_) {}
-
-
-        setStatus(
-            `Panel resized: ${
-                dock.offsetWidth
-            }×${
-                dock.offsetHeight
-            }px`
-        );
-
-    };
-
-
-    dock.addEventListener(
-        "pointerup",
-        stopResize
-    );
-
-
-    dock.addEventListener(
-        "pointercancel",
-        stopResize
-    );
-
-}
-
-
-/* =====================================================
-   INITIALIZE RESIZER
-===================================================== */
-
-if (
-    document.readyState === "loading"
-) {
-
-    document.addEventListener(
-        "DOMContentLoaded",
-        initDockResizer
-    );
-
-} else {
-
-    initDockResizer();
-
-}
-
-
-/* =====================================================
-   BUTTON SELECTION
-===================================================== */
+// =========================================================
+// BUTTON SELECTION
+// =========================================================
 
 function selectOption(
     button,
@@ -699,44 +1045,77 @@ function selectOption(
             .querySelectorAll(
                 ".tool-button.selected"
             )
-            .forEach(btn => {
+            .forEach(
+                btn => {
 
-                btn.classList.remove(
-                    "selected"
-                );
+                    btn.classList.remove(
+                        "selected"
+                    );
 
-            });
+                }
+            );
 
     }
 
-
-    /* ================================================
-       DESELECT
-    ================================================= */
 
     if (wasSelected) {
 
         hideNotification();
 
+
         setStatus(
             `${name} deselected`
         );
+
+
+        toolsChannel.postMessage({
+
+            type:
+                "TOOL_SELECTED",
+
+            id:
+                id,
+
+            name:
+                `${name} deselected`,
+
+            selected:
+                false
+
+        });
+
 
         return;
 
     }
 
 
-    /* ================================================
-       SELECT
-    ================================================= */
-
     button.classList.add(
         "selected"
     );
 
 
-    showNotification(name);
+    toolsChannel.postMessage({
+
+        type:
+            "TOOL_SELECTED",
+
+        id:
+            id,
+
+        name:
+            name,
+
+        selected:
+            true
+
+    });
+
+
+    showNotification(
+        name
+    );
+
 
     setStatus(
         `${name} selected`
@@ -745,9 +1124,9 @@ function selectOption(
 }
 
 
-/* =====================================================
-   ACTION BUTTONS
-===================================================== */
+// =========================================================
+// ACTIONS: UNDO / REDO / RESET
+// =========================================================
 
 function performAction(
     id,
@@ -758,16 +1137,42 @@ function performAction(
         .querySelectorAll(
             ".tool-button.selected"
         )
-        .forEach(button => {
+        .forEach(
+            button => {
 
-            button.classList.remove(
-                "selected"
-            );
+                button.classList.remove(
+                    "selected"
+                );
 
-        });
+            }
+        );
 
 
-    showNotification(name);
+    /*
+     * Send action to MAIN MAP.
+     */
+
+    toolsChannel.postMessage({
+
+        type:
+            "TOOL_SELECTED",
+
+        id:
+            id,
+
+        name:
+            name,
+
+        action:
+            true
+
+    });
+
+
+    showNotification(
+        name
+    );
+
 
     setStatus(
         `Action: ${name}`
@@ -776,15 +1181,21 @@ function performAction(
 }
 
 
-/* =====================================================
-   NOTIFICATION
-===================================================== */
+// =========================================================
+// NOTIFICATION
+// =========================================================
 
-let statusTimer;
-let notifTimer;
+let statusTimer =
+    null;
 
 
-function showNotification(name) {
+let notifTimer =
+    null;
+
+
+function showNotification(
+    name
+) {
 
     const notif =
         document.getElementById(
@@ -798,16 +1209,26 @@ function showNotification(name) {
         );
 
 
-    if (!notif || !text) return;
+    if (
+        !notif ||
+        !text
+    ) {
+        return;
+    }
 
 
-    text.textContent = name;
+    text.textContent =
+        name;
 
 
-    notif.classList.add("show");
+    notif.classList.add(
+        "show"
+    );
 
 
-    clearTimeout(notifTimer);
+    clearTimeout(
+        notifTimer
+    );
 
 
     notifTimer =
@@ -825,9 +1246,9 @@ function showNotification(name) {
 }
 
 
-/* =====================================================
-   HIDE NOTIFICATION
-===================================================== */
+// =========================================================
+// HIDE NOTIFICATION
+// =========================================================
 
 function hideNotification() {
 
@@ -848,11 +1269,13 @@ function hideNotification() {
 }
 
 
-/* =====================================================
-   STATUS
-===================================================== */
+// =========================================================
+// STATUS
+// =========================================================
 
-function setStatus(message) {
+function setStatus(
+    message
+) {
 
     const status =
         document.getElementById(
@@ -867,7 +1290,9 @@ function setStatus(message) {
         message;
 
 
-    clearTimeout(statusTimer);
+    clearTimeout(
+        statusTimer
+    );
 
 
     statusTimer =
@@ -884,312 +1309,279 @@ function setStatus(message) {
 }
 
 
-/* =====================================================
-   GLOBAL WINDOW ATTACHMENTS
-===================================================== */
+// =========================================================
+// RESIZER
+// =========================================================
+
+function initDockResizer() {
+
+    const dock =
+        document.querySelector(
+            ".tactical-menu-dock"
+        );
+
+
+    if (!dock) return;
+
+
+    let isResizing =
+        false;
+
+
+    let startX =
+        0;
+
+
+    let startY =
+        0;
+
+
+    let startWidth =
+        0;
+
+
+    let startHeight =
+        0;
+
+
+    const MIN_WIDTH =
+        320;
+
+
+    const MAX_WIDTH =
+        420;
+
+
+    const MIN_HEIGHT =
+        280;
+
+
+    dock.addEventListener(
+        "pointerdown",
+        event => {
+
+            const rect =
+                dock.getBoundingClientRect();
+
+
+            const isGrip =
+                event.target.id ===
+                    "dockResizeHandle" ||
+
+                (
+                    event.clientX >=
+                        rect.right - 24 &&
+
+                    event.clientY >=
+                        rect.bottom - 24
+                );
+
+
+            if (!isGrip) {
+                return;
+            }
+
+
+            isResizing =
+                true;
+
+
+            startX =
+                event.clientX;
+
+
+            startY =
+                event.clientY;
+
+
+            startWidth =
+                dock.offsetWidth;
+
+
+            startHeight =
+                dock.offsetHeight;
+
+
+            dock.classList.add(
+                "resizing"
+            );
+
+
+            dock.setPointerCapture(
+                event.pointerId
+            );
+
+
+            event.preventDefault();
+
+        }
+    );
+
+
+    dock.addEventListener(
+        "pointermove",
+        event => {
+
+            if (!isResizing) return;
+
+
+            const maxHeight =
+                window.innerHeight *
+                0.92;
+
+
+            const newWidth =
+                Math.min(
+                    MAX_WIDTH,
+                    Math.max(
+                        MIN_WIDTH,
+                        startWidth +
+                        event.clientX -
+                        startX
+                    )
+                );
+
+
+            const newHeight =
+                Math.min(
+                    maxHeight,
+                    Math.max(
+                        MIN_HEIGHT,
+                        startHeight +
+                        event.clientY -
+                        startY
+                    )
+                );
+
+
+            dock.style.width =
+                `${newWidth}px`;
+
+
+            dock.style.height =
+                `${newHeight}px`;
+
+        }
+    );
+
+
+    const stopResize =
+        event => {
+
+            if (!isResizing) return;
+
+
+            isResizing =
+                false;
+
+
+            dock.classList.remove(
+                "resizing"
+            );
+
+
+            try {
+
+                dock.releasePointerCapture(
+                    event.pointerId
+                );
+
+            }
+
+            catch (_) {}
+
+
+            setStatus(
+                `Panel resized: ${
+                    dock.offsetWidth
+                }×${
+                    dock.offsetHeight
+                }px`
+            );
+
+        };
+
+
+    dock.addEventListener(
+        "pointerup",
+        stopResize
+    );
+
+
+    dock.addEventListener(
+        "pointercancel",
+        stopResize
+    );
+
+}
+
+
+// =========================================================
+// INITIALIZE RESIZER
+// =========================================================
+
+if (
+    document.readyState ===
+    "loading"
+) {
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        initDockResizer
+    );
+
+}
+
+else {
+
+    initDockResizer();
+
+}
+
+
+// =========================================================
+// GLOBAL FUNCTIONS
+// =========================================================
 
 window.switchSection =
     switchSection;
 
+
 window.closeTacticalPanel =
     closeTacticalPanel;
+
 
 window.filterCards =
     filterCards;
 
+
 window.filterCategory =
     filterCategory;
+
 
 window.selectSymbolCard =
     selectSymbolCard;
 
+
 window.selectOption =
     selectOption;
+
 
 window.performAction =
     performAction;
 
+
 window.sliderChange =
     sliderChange;
 
+
 window.stepValue =
     stepValue;
+
 
 window.toggleMaskSetting =
     toggleMaskSetting;
 
 
-    // =====================================================
-// TACTICAL TOOLS POPUP
-// =====================================================
-
-let tacticalToolsPopup = null;
-
-let originalToolsParent = null;
-let originalToolsNextSibling = null;
-
-
-// =====================================================
-// OPEN TOOLS IN POPUP
-// =====================================================
-
-function openToolsPopup() {
-
-    const dock = document.querySelector(
-        ".tactical-menu-dock"
-    );
-
-    if (!dock) {
-
-        console.error(
-            "Tactical tools dock not found."
-        );
-
-        return;
-    }
-
-
-    // If popup already exists, just focus it
-
-    if (
-        tacticalToolsPopup &&
-        !tacticalToolsPopup.closed
-    ) {
-
-        tacticalToolsPopup.focus();
-
-        return;
-    }
-
-
-    // Remember where the panel originally lived
-
-    originalToolsParent =
-        dock.parentNode;
-
-    originalToolsNextSibling =
-        dock.nextSibling;
-
-
-    // Open popup
-
-    tacticalToolsPopup = window.open(
-        "",
-        "TacticalToolsWindow",
-        "width=450,height=700,left=900,top=100"
-    );
-
-
-    if (!tacticalToolsPopup) {
-
-        alert(
-            "Popup was blocked by the browser."
-        );
-
-        return;
-    }
-
-
-    // =================================================
-    // CREATE POPUP DOCUMENT
-    // =================================================
-
-    tacticalToolsPopup.document.write(`
-
-        <!DOCTYPE html>
-
-        <html>
-
-        <head>
-
-            <title>Tactical Tools</title>
-
-            <meta
-                charset="UTF-8"
-            >
-
-            <meta
-                name="viewport"
-                content="width=device-width, initial-scale=1.0"
-            >
-
-        </head>
-
-        <body>
-
-        </body>
-
-        </html>
-
-    `);
-
-    tacticalToolsPopup.document.close();
-
-
-    // =================================================
-    // COPY YOUR STYLE.CSS
-    // =================================================
-
-    const styleLink =
-        tacticalToolsPopup.document.createElement(
-            "link"
-        );
-
-    styleLink.rel = "stylesheet";
-
-    styleLink.href = "style.css";
-
-
-    tacticalToolsPopup.document.head.appendChild(
-        styleLink
-    );
-
-
-    // =================================================
-    // MOVE ACTUAL TOOL PANEL
-    // =================================================
-
-    tacticalToolsPopup.document.body.appendChild(
-        dock
-    );
-
-
-    // =================================================
-    // POPUP BODY SETUP
-    // =================================================
-
-    tacticalToolsPopup.document.body.style.margin =
-        "0";
-
-    tacticalToolsPopup.document.body.style.width =
-        "100vw";
-
-    tacticalToolsPopup.document.body.style.height =
-        "100vh";
-
-    tacticalToolsPopup.document.body.style.overflow =
-        "hidden";
-
-
-    // =================================================
-    // RESET PANEL POSITION
-    // =================================================
-
-    dock.style.position = "relative";
-
-    dock.style.left = "0";
-
-    dock.style.top = "0";
-
-    dock.style.right = "auto";
-
-    dock.style.bottom = "auto";
-
-    dock.style.transform = "none";
-
-    dock.style.width = "100%";
-
-    dock.style.height = "100%";
-
-
-    // =================================================
-    // HANDLE POPUP CLOSE
-    // =================================================
-
-    const checkPopup =
-        setInterval(() => {
-
-            if (
-                !tacticalToolsPopup ||
-                tacticalToolsPopup.closed
-            ) {
-
-                clearInterval(checkPopup);
-
-                returnToolsToMainPage();
-
-            }
-
-        }, 500);
-}
-
-
-// =====================================================
-// RETURN TO MAIN PAGE
-// =====================================================
-
-function returnToolsToMainPage() {
-
-    const dock = document.querySelector(
-        ".tactical-menu-dock"
-    );
-
-    if (!dock) return;
-
-
-    if (!originalToolsParent) {
-
-        return;
-
-    }
-
-
-    // Restore panel to original location
-
-    if (
-        originalToolsNextSibling &&
-        originalToolsNextSibling.parentNode ===
-            originalToolsParent
-    ) {
-
-        originalToolsParent.insertBefore(
-            dock,
-            originalToolsNextSibling
-        );
-
-    } else {
-
-        originalToolsParent.appendChild(
-            dock
-        );
-
-    }
-
-
-    // Restore original positioning
-
-    dock.style.position = "";
-
-    dock.style.left = "";
-
-    dock.style.top = "";
-
-    dock.style.right = "";
-
-    dock.style.bottom = "";
-
-    dock.style.transform = "";
-
-    dock.style.width = "";
-
-    dock.style.height = "";
-
-
-    tacticalToolsPopup = null;
-
-
-    originalToolsParent = null;
-
-    originalToolsNextSibling = null;
-}
-
-
-// =====================================================
-// GLOBAL
-// =====================================================
-
-window.openToolsPopup =
-    openToolsPopup;
-
-window.returnToolsToMainPage =
-    returnToolsToMainPage;
+window.openToolsWindow =
+    openToolsWindow;
